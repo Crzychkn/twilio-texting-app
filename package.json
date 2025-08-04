@@ -1,0 +1,16 @@
+{
+  "name": "twilio-desktop-app",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^27.0.0",
+    "electron-store": "^8.2.0",
+    "papaparse": "^5.5.3",
+    "react-router-dom": "^7.7.1",
+    "sqlite3": "^5.1.7",
+    "twilio": "^4.0.0"
+  }
+}
