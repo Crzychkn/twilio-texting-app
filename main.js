@@ -1,44 +1,55 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const Store = require('electron-store');
 const twilio = require('twilio');
-const sqlite3 = require('sqlite3').verbose();  // Import sqlite3
+const sqlite3 = require('sqlite3').verbose();
+
 const store = new Store();
 
-// Set up SQLite database
-const dbPath = path.join(__dirname, 'messages.db');
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('Error opening the database:', err);
-  } else {
-    console.log('Database opened successfully');
-  }
-});
+let db; // shared connection
 
-// Create the messages table if it doesn't exist
-const createTable = () => {
-  const query = `
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      content TEXT NOT NULL,
-      send_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-      status TEXT DEFAULT 'pending',
-      recipient_count INTEGER DEFAULT 0
-    );
-  `;
-  db.run(query, (err) => {
-    if (err) {
-      console.error('Error creating table:', err);
-    } else {
-      console.log('Messages table created (or already exists)');
+function initDatabase() {
+  const userDataDir = app.getPath('userData');
+  const dbPath = path.join(userDataDir, 'messages.db');
+
+  // migrate a dev-time db if it exists
+  const legacyPath = path.join(__dirname, 'messages.db');
+  try {
+    if (!fs.existsSync(dbPath) && fs.existsSync(legacyPath)) {
+      fs.mkdirSync(userDataDir, { recursive: true });
+      fs.copyFileSync(legacyPath, dbPath);
     }
+  } catch (_) {}
+
+  fs.mkdirSync(userDataDir, { recursive: true });
+
+  db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+      console.error('Error opening the database:', err);
+      return;
+    }
+    console.log('Database opened at:', dbPath);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        content TEXT NOT NULL,
+        send_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+        status TEXT DEFAULT 'pending',
+        recipient_count INTEGER DEFAULT 0
+      )
+    `, (e) => {
+      if (e) console.error('Error creating table:', e);
+      else console.log('Messages table ready');
+    });
+
+    // (optional) better concurrency
+    db.run(`PRAGMA journal_mode = WAL;`);
   });
-};
+}
 
-// Initialize the table
-createTable();
-
-function createWindow () {
+function createWindow() {
   const win = new BrowserWindow({
     width: 1000,
     height: 800,
@@ -51,23 +62,22 @@ function createWindow () {
 }
 
 app.whenReady().then(() => {
-  // IPC handler to get settings
-  ipcMain.handle('get-settings', () => {
-    return {
-      twilioAccountSid: store.get('twilioAccountSid') || '',
-      twilioAuthToken: store.get('twilioAuthToken') || '',
-      twilioPhoneNumber: store.get('twilioPhoneNumber') || '',
-    };
-  });
+  initDatabase();
 
-  // IPC handler to save settings
+  // Settings
+  ipcMain.handle('get-settings', () => ({
+    twilioAccountSid: store.get('twilioAccountSid') || '',
+    twilioAuthToken: store.get('twilioAuthToken') || '',
+    twilioPhoneNumber: store.get('twilioPhoneNumber') || '',
+  }));
+
   ipcMain.handle('save-settings', (_, values) => {
     store.set('twilioAccountSid', values.twilioAccountSid);
     store.set('twilioAuthToken', values.twilioAuthToken);
     store.set('twilioPhoneNumber', values.twilioPhoneNumber);
   });
 
-  // IPC handler to send messages
+  // Send message(s)
   ipcMain.handle('send-message', async (_, { to, message, mediaUrl }) => {
     const sid = store.get('twilioAccountSid');
     const token = store.get('twilioAuthToken');
@@ -86,37 +96,33 @@ app.whenReady().then(() => {
         if (mediaUrl) options.mediaUrl = [mediaUrl];
         await client.messages.create(options);
         results[number] = '✅ Sent';
-
-        // Store the message in the database
-        const stmt = db.prepare("INSERT INTO messages (content, recipient_count) VALUES (?, ?)");
-        stmt.run(message, to.length, function (err) {
-          if (err) {
-            console.error('Error inserting message:', err);
-          } else {
-            console.log(`Message inserted with ID: ${this.lastID}`);
-          }
-        });
-        stmt.finalize();
       } catch (err) {
         results[number] = `❌ ${err.message}`;
       }
     }
 
+    // record one row per batch (content + recipient_count)
+    db.run(
+      "INSERT INTO messages (content, recipient_count, status) VALUES (?, ?, ?)",
+      [message, to.length, 'sent'],
+      function (err) {
+        if (err) console.error('Error inserting message:', err);
+        else console.log(`Message batch inserted with ID: ${this.lastID}`);
+      }
+    );
+
     return results;
   });
 
-  // IPC handler to retrieve messages
-  ipcMain.handle('get-messages', (event) => {
-    return new Promise((resolve, reject) => {
+  // History
+  ipcMain.handle('get-messages', () =>
+    new Promise((resolve, reject) => {
       db.all("SELECT * FROM messages ORDER BY send_time DESC", [], (err, rows) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(rows);
-        }
+        if (err) reject(err);
+        else resolve(rows);
       });
-    });
-  });
+    })
+  );
 
   createWindow();
 
