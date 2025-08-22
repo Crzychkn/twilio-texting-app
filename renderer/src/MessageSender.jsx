@@ -47,6 +47,9 @@ const MessageSender = () => {
       message.warning('Please enter a message.');
       return;
     }
+    if (!window.twilioAPI?.sendMessage) {
+      return message.error('Native API not available (preload not loaded).');
+    }
 
     setIsSending(true);
 

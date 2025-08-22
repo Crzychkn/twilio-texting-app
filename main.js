@@ -59,6 +59,9 @@ function createWindow() {
   });
 
   win.loadFile('renderer/dist/index.html');
+  // For debugging
+  // win.webContents.openDevTools({ mode: 'detach' });
+
 }
 
 app.whenReady().then(() => {
@@ -134,3 +137,4 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+

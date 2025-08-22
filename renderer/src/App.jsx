@@ -1,5 +1,5 @@
 import { Layout, Menu } from 'antd';
-import { BrowserRouter as Router, Route, Routes, Link } from 'react-router-dom';
+import { Route, Routes, Link } from 'react-router-dom';
 import { MessageOutlined, SettingOutlined, HistoryOutlined } from '@ant-design/icons';
 import MessageSender from './MessageSender';
 import Settings from './Settings';
@@ -10,7 +10,6 @@ const { Header, Sider, Content } = Layout;
 const App = () => {
 
   return (
-    <Router>
       <Layout style={{ minHeight: '100vh' }}>
         <Sider breakpoint="lg" collapsedWidth="0">
           <div style={{ color: 'white', padding: '1rem', fontWeight: 'bold' }}>
@@ -50,7 +49,6 @@ const App = () => {
           </Content>
         </Layout>
       </Layout>
-    </Router>
   );
 };
 

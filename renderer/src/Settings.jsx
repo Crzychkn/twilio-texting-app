@@ -8,6 +8,7 @@ const Settings = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (!window.twilioAPI?.getSettings) return;
     window.twilioAPI.getSettings().then(settings => {
       form.setFieldsValue(settings);
     });
