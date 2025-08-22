@@ -10,9 +10,10 @@
     "forge": "./forge.config.js"
   },
   "scripts": {
+    "build:renderer": "npm --prefix renderer ci && npm --prefix renderer run build",
+    "make": "npm run build:renderer && electron-forge make",
     "start": "electron .",
     "start:forge": "electron-forge start",
-    "make": "electron-forge make",
     "package": "electron-forge package"
   },
   "dependencies": {
