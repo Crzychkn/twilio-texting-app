@@ -4,7 +4,8 @@ module.exports = {
   packagerConfig: {
     asar: { unpackDir: '**/*.node' },
     // Optional app icon. Provide assets/icon.icns, assets/icon.ico, assets/icon.png
-    icon: path.resolve(__dirname, 'assets', 'icon')
+    icon: path.resolve(__dirname, 'assets', 'icon'),
+    executableName: 'twilio-texting-app',
   },
   rebuildConfig: {},
   makers: [
