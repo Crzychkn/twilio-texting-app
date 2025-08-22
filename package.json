@@ -1,6 +1,9 @@
 {
-  "name": "twilio-desktop-app",
+  "name": "twilio-texting-app",
   "version": "1.0.3",
+  "description": "Twilio Texting App",
+  "author": "Arthur Schoenfeld",
+  "productName": "Twilio Texting App",
   "main": "main.js",
   "config": {
     "forge": "./forge.config.js"
