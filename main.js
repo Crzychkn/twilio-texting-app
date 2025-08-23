@@ -49,12 +49,20 @@ function initDatabase() {
   });
 }
 
+const isProd = app.isPackaged || process.env.NODE_ENV === 'production';
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1000,
     height: 800,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      devTools: !isProd,
+      contextIsolation: true,
+      enableRemoteModule: false,
+      nodeIntegration: false,
+      sandbox: true,
+      nativeWindowOpen: true,
     }
   });
 

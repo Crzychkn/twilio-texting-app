@@ -16,10 +16,14 @@ Built with **Electron**, packaged with **Electron Forge**, and released via **Gi
 Important: To send messages to U.S. mobile numbers, this app requires a registered A2P 10DLC Campaign through Twilio.
 Without 10DLC, carriers will block or severely limit delivery.
 You must:
+
 Register a Brand and Campaign in Twilio
+
 Link them to a Messaging Service with your Twilio number(s)
+
 Configure this app to use that Messaging Service SID
-👉 Twilio A2P 10DLC Setup Guide
+
+👉 Twilio A2P 10DLC Setup Guide: https://www.twilio.com/docs/messaging/a2p-10dlc
 
 ---
 
