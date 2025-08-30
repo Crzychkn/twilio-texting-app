@@ -63,21 +63,32 @@ const MessageSender = () => {
 
       console.log('Twilio Message Send Results:', results); // Log the response
 
-      // After message is sent, store it in the SQLite database
-      await storeSentMessage(messageText, contacts.length);
+      setSendStatus(results.results || {});
+      const ok = Number(results.ok || 0);
+      const fail = Number(results.fail || 0);
 
-      setSendStatus(results); // Update the UI with the results
+      if (ok > 0 && fail === 0) {
+        message.success(`Sent ${ok} message${ok === 1 ? '' : 's'}.`);
+      } else if (ok > 0 && fail > 0) {
+        message.warning(`Partial success: sent ${ok}, failed ${fail}.`);
+      } else {
+        message.error('Failed to send all messages.');
+      }
+
+      window.twilioAPI?.storeMessage(
+        messageText,
+        contacts.length,
+        ok > 0 && fail === 0 ? 'sent' : ok > 0 ? 'partial' : 'failed',
+        fail ? `failed: ${fail}` : null
+      ).then(r => console.log('Logged batch:', r))
+        .catch(e => console.warn('Logging failed (non-fatal):', e));
+
     } catch (err) {
       console.error('Error sending message:', err);
       message.error('Failed to send message. Please try again later.');
     } finally {
       setIsSending(false);
     }
-  };
-
-  // Function to store sent messages in SQLite database
-  const storeSentMessage = (content, recipientCount) => {
-    return window.twilioAPI.storeMessage(content, recipientCount);
   };
 
   const columns = [

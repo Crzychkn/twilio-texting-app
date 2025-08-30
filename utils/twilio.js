@@ -5,7 +5,7 @@ const store = new Store();
 // Assume Twilio creds are stored in local config
 const accountSid = store.get('twilioAccountSid');
 const authToken = store.get('twilioAuthToken');
-const fromNumber = store.get('twilioPhoneNumber');
+const from = store.get('twilioFrom');
 
 const client = twilio(accountSid, authToken);
 
@@ -16,7 +16,7 @@ async function sendMessages(toList, body) {
     try {
       const res = await client.messages.create({
         to: number,
-        from: fromNumber,
+        from: from,
         body
       });
       results[number] = '✅ Sent';

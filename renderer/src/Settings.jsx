@@ -36,8 +36,8 @@ const Settings = () => {
         <Form.Item label="Auth Token" name="twilioAuthToken" rules={[{ required: true }]}>
           <Input.Password />
         </Form.Item>
-        <Form.Item label="From Phone Number" name="twilioPhoneNumber" rules={[{ required: true }]}>
-          <Input />
+        <Form.Item label="From (Phone # or Messaging Service SID)" name="twilioFrom" rules={[{ required: true }]}>
+          <Input placeholder="+15551234567 or MGXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" />
         </Form.Item>
         <Form.Item>
           <Space>

@@ -13,17 +13,6 @@ function initDatabase() {
   const userDataDir = app.getPath('userData');
   const dbPath = path.join(userDataDir, 'messages.db');
 
-  // migrate a dev-time db if it exists
-  const legacyPath = path.join(__dirname, 'messages.db');
-  try {
-    if (!fs.existsSync(dbPath) && fs.existsSync(legacyPath)) {
-      fs.mkdirSync(userDataDir, { recursive: true });
-      fs.copyFileSync(legacyPath, dbPath);
-    }
-  } catch (_) {}
-
-  fs.mkdirSync(userDataDir, { recursive: true });
-
   db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
       console.error('Error opening the database:', err);
@@ -37,7 +26,8 @@ function initDatabase() {
         content TEXT NOT NULL,
         send_time DATETIME DEFAULT CURRENT_TIMESTAMP,
         status TEXT DEFAULT 'pending',
-        recipient_count INTEGER DEFAULT 0
+        recipient_count INTEGER DEFAULT 0,
+        error_message TEXT
       )
     `, (e) => {
       if (e) console.error('Error creating table:', e);
@@ -67,9 +57,6 @@ function createWindow() {
   });
 
   win.loadFile('renderer/dist/index.html');
-  // For debugging
-  // win.webContents.openDevTools({ mode: 'detach' });
-
 }
 
 app.whenReady().then(() => {
@@ -79,20 +66,20 @@ app.whenReady().then(() => {
   ipcMain.handle('get-settings', () => ({
     twilioAccountSid: store.get('twilioAccountSid') || '',
     twilioAuthToken: store.get('twilioAuthToken') || '',
-    twilioPhoneNumber: store.get('twilioPhoneNumber') || '',
+    twilioFrom: store.get('twilioFrom') || '',
   }));
 
   ipcMain.handle('save-settings', (_, values) => {
     store.set('twilioAccountSid', values.twilioAccountSid);
     store.set('twilioAuthToken', values.twilioAuthToken);
-    store.set('twilioPhoneNumber', values.twilioPhoneNumber);
+    store.set('twilioFrom', values.twilioFrom);
   });
 
   // Send message(s)
   ipcMain.handle('send-message', async (_, { to, message, mediaUrl }) => {
     const sid = store.get('twilioAccountSid');
     const token = store.get('twilioAuthToken');
-    const from = store.get('twilioPhoneNumber');
+    const from = store.get('twilioFrom');
 
     if (!sid || !token || !from) {
       return Object.fromEntries(to.map(num => [num, '❌ Missing Twilio settings']));
@@ -100,29 +87,24 @@ app.whenReady().then(() => {
 
     const client = twilio(sid, token);
     const results = {};
+    let ok = 0, fail = 0;
+
+    const fromOptions = from.startsWith('MG') ? { messagingServiceSid: from } : { from };
 
     for (const number of to) {
       try {
-        const options = { to: number, from, body: message };
+        const options = { to: number, body: message, ...fromOptions };
         if (mediaUrl) options.mediaUrl = [mediaUrl];
         await client.messages.create(options);
         results[number] = '✅ Sent';
+        ok++;
       } catch (err) {
-        results[number] = `❌ ${err.message}`;
+        results[number] = `❌ ${err.message || 'Send failed'}`;
+        fail++;
       }
     }
 
-    // record one row per batch (content + recipient_count)
-    db.run(
-      "INSERT INTO messages (content, recipient_count, status) VALUES (?, ?, ?)",
-      [message, to.length, 'sent'],
-      function (err) {
-        if (err) console.error('Error inserting message:', err);
-        else console.log(`Message batch inserted with ID: ${this.lastID}`);
-      }
-    );
-
-    return results;
+    return { results, ok, fail };
   });
 
   // History
@@ -134,6 +116,24 @@ app.whenReady().then(() => {
       });
     })
   );
+
+  // Store messages
+  ipcMain.handle('store-message', async (_event, { content, recipientCount, status = 'sent', errorMessage = null }) => {
+    return new Promise((resolve) => {
+      db.run(
+        "INSERT INTO messages (content, recipient_count, status, error_message) VALUES (?, ?, ?, ?)",
+        [content, recipientCount ?? 0, status, errorMessage],
+        function (err) {
+          if (err) {
+            console.error('Error inserting message:', err);
+            return resolve({ ok: false, error: String(err) });
+          }
+          console.log(`Message batch inserted with ID: ${this.lastID}`);
+          return resolve({ ok: true, id: this.lastID });
+        }
+      );
+    });
+  });
 
   createWindow();
 

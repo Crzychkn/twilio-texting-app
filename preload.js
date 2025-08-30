@@ -12,5 +12,9 @@ contextBridge.exposeInMainWorld('twilioAPI', {
   saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
 
   // Get the stored messages from the database
-  getMessages: () => ipcRenderer.invoke('get-messages')
+  getMessages: () => ipcRenderer.invoke('get-messages'),
+
+  // Store a message in the database
+  storeMessage: (content, recipientCount, status = 'sent', errorMessage = null) =>
+    ipcRenderer.invoke('store-message', { content, recipientCount, status, errorMessage }),
 });
