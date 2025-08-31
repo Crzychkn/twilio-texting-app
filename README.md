@@ -29,10 +29,7 @@ Configure this app to use that Messaging Service SID
 
 ## 📥 Download
 Head to **Releases** and grab the latest installers:  
-`Releases → <your tag> → Assets` (DMG/ZIP for macOS, EXE for Windows, DEB/RPM for Linux).
-
-> If you don’t see a published release yet, push a version tag (see **Release** below).
-
+(DMG/ZIP for macOS, EXE for Windows, DEB/RPM for Linux).
 ---
 
 ## 💻 Install
@@ -41,6 +38,7 @@ Head to **Releases** and grab the latest installers:
 - **DMG**: open → drag the app into **Applications**  
 - **ZIP**: unzip → drag into **Applications**  
 > Unsigned builds: right-click the app → **Open** → **Open** (bypasses Gatekeeper).
+> Or run xattr -dr com.apple.quarantine "/Applications/Twilio Texting App.app" in Terminal, then open App as normal.
 
 ### Windows
 - **EXE (Squirrel)**: run the installer  
@@ -78,10 +76,12 @@ phone,name
 ---
 
 ## 🧭 Usage
-1. **Import contacts** (optional) or paste numbers.
+1. **Import contacts** from CSV.
 2. Type a **message**; optionally add a **Media URL** for MMS.
-3. Click **Send**.  
-4. Check **History** to see what was sent (content, time, recipients).
+3. Select **Phone Number** from the dropdown. 
+4. Click **Send** (or schedule a time to send).
+5. Check **History** to see what was sent (content, time, recipients).
+6. Check **Schedule Messages** to see scheduled messages. 
 
 ---
 
@@ -97,14 +97,14 @@ git clone https://github.com/<you>/twilio-texting-app.git
 cd twilio-texting-app
 npm install
 
-# run in dev (with Forge)
-npm run start:forge
+# run in dev
+make run
 ```
 
 ### Build locally
 ```bash
-# all platforms (runs Forge "make")
-npm run make
+# all platforms
+make build
 
 # macOS ZIP only (handy if DMG deps cause local build noise)
 npx electron-forge make --targets @electron-forge/maker-zip
