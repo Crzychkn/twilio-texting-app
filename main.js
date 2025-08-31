@@ -34,6 +34,17 @@ function initDatabase() {
       else console.log('Messages table ready');
     });
 
+    db.run(`
+        CREATE TABLE IF NOT EXISTS scheduled_meta (
+            sid TEXT PRIMARY KEY,
+            send_at_iso TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`, (e) => {
+      if (e) console.error('Error creating scheduled_meta table:', e);
+      else console.log('scheduled_meta table ready');
+    });
+
     // (optional) better concurrency
     db.run(`PRAGMA journal_mode = WAL;`);
   });
@@ -134,6 +145,95 @@ app.whenReady().then(() => {
       );
     });
   });
+
+  // Create scheduled messages for a list of recipients
+  ipcMain.handle('twilio-schedule-create', async (_e, { recipients, content, mediaUrl, sendAtISO }) => {
+    const sid = store.get('twilioAccountSid');
+    const token = store.get('twilioAuthToken');
+    const from = store.get('twilioFrom'); // must be MG...
+    if (!sid || !token || !from) return { ok: false, error: 'Missing Twilio settings' };
+    if (!from.startsWith('MG')) return { ok: false, error: 'Scheduling requires a Messaging Service SID (starts with MG).' };
+
+    const client = twilio(sid, token);
+
+    const results = [];
+    for (const to of recipients || []) {
+      try {
+        const params = {
+          to,
+          body: (content || '').trim(),
+          messagingServiceSid: from,             // REQUIRED for scheduling
+          scheduleType: 'fixed',
+          sendAt: new Date(sendAtISO).toISOString(), // RFC3339/ISO8601
+        };
+        if (mediaUrl) params.mediaUrl = [mediaUrl];
+
+        const msg = await client.messages.create(params);
+        // msg.status will be "scheduled"; keep SID so we can cancel later
+        results.push({ to, sid: msg.sid, status: msg.status });
+
+        db.run(
+          `INSERT OR REPLACE INTO scheduled_meta (sid, send_at_iso, created_at) VALUES (?, ?, ?)`,
+          [msg.sid, sendAtISO, new Date().toISOString()],
+        );
+      } catch (err) {
+        console.error('schedule create error:', { to, message: err?.message, code: err?.code });
+        results.push({ to, error: err?.message || 'Failed to schedule' });
+      }
+    }
+
+    return {
+      ok: results.every(r => r.sid),
+      results,
+    };
+  });
+
+// List scheduled messages (paginated lightly)
+  ipcMain.handle('twilio-schedule-list', async (_e, { pageSize = 50 }) => {
+    const sid = store.get('twilioAccountSid');
+    const token = store.get('twilioAuthToken');
+    if (!sid || !token) return [];
+
+    const client = twilio(sid, token);
+    // Filter by scheduled status
+    const items = await client.messages.list({ status: 'scheduled', limit: pageSize });
+    // Load all meta once and map by SID
+    const meta = await new Promise((resolve) => {
+      db.all(`SELECT sid, send_at_iso FROM scheduled_meta`, [], (err, rows) => {
+        if (err) { console.error('meta load error:', err); return resolve([]); }
+        resolve(rows || []);
+      });
+    });
+    const metaMap = new Map(meta.map(r => [r.sid, r.send_at_iso]));
+    // Return minimal fields we need
+    return items.map(m => ({
+      sid: m.sid,
+      to: m.to,
+      status: m.status,          // 'scheduled'
+      dateCreated: m.dateCreated,
+      messagingServiceSid: m.messagingServiceSid,
+      bodyPreview: (m.body || '').slice(0, 120),
+      numMedia: m.numMedia,
+      sendAtISO: metaMap.get(m.sid) || null,
+    }));
+  });
+
+// Cancel a scheduled message by SID
+  ipcMain.handle('twilio-schedule-cancel', async (_e, { sid }) => {
+    const a = store.get('twilioAccountSid');
+    const t = store.get('twilioAuthToken');
+    if (!a || !t) return { ok: false, error: 'Missing Twilio settings' };
+
+    const client = twilio(a, t);
+    try {
+      const updated = await client.messages(sid).update({ status: 'canceled' });
+      return { ok: updated.status === 'canceled' };
+    } catch (err) {
+      console.error('cancel error:', { sid, message: err?.message, code: err?.code });
+      return { ok: false, error: err?.message || 'Failed to cancel' };
+    }
+  });
+
 
   createWindow();
 

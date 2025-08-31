@@ -1,9 +1,10 @@
 import { Layout, Menu } from 'antd';
 import { Route, Routes, Link } from 'react-router-dom';
-import { MessageOutlined, SettingOutlined, HistoryOutlined } from '@ant-design/icons';
+import { MessageOutlined, SettingOutlined, HistoryOutlined, ScheduleOutlined, } from '@ant-design/icons';
 import MessageSender from './MessageSender';
 import Settings from './Settings';
 import HistoryPage from './HistoryPage'; // Import the new HistoryPage component
+import SchedulePage from './SchedulePage';
 
 const { Header, Sider, Content } = Layout;
 
@@ -26,6 +27,9 @@ const App = () => {
             <Menu.Item key="settings" icon={<SettingOutlined />}>
               <Link to="/settings">Settings</Link>
             </Menu.Item>
+            <Menu.Item key="schedule" icon={<ScheduleOutlined />}>
+              <Link to="/schedule">Schedule Message</Link>
+            </Menu.Item>
             <Menu.Item key="history" icon={<HistoryOutlined />}>
               <Link to="/history">Message History</Link>
             </Menu.Item>
@@ -38,12 +42,14 @@ const App = () => {
               <Route path="/settings" element={'Settings'} />
               <Route path="/history" element={'Message History'} />
               <Route path="/" element={'Send Messages'} />
+              <Route path="/schedule" element={'Schedule Message'} />
             </Routes>
           </Header>
           <Content style={{ margin: '1rem' }}>
               <Routes>
                 <Route path="/" element={<MessageSender />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/schedule" element={<SchedulePage />} />
                 <Route path="/history" element={<HistoryPage />} />
               </Routes>
           </Content>

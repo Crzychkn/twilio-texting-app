@@ -17,4 +17,8 @@ contextBridge.exposeInMainWorld('twilioAPI', {
   // Store a message in the database
   storeMessage: (content, recipientCount, status = 'sent', errorMessage = null) =>
     ipcRenderer.invoke('store-message', { content, recipientCount, status, errorMessage }),
+
+  scheduleCreate: (payload) => ipcRenderer.invoke('twilio-schedule-create', payload),
+  scheduleList:   (opts)    => ipcRenderer.invoke('twilio-schedule-list', opts || {}),
+  scheduleCancel: (sid)     => ipcRenderer.invoke('twilio-schedule-cancel', { sid }),
 });

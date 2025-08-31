@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { Modal, Layout, Upload, Button, Typography, Table, message, Input, Space, Select } from 'antd';
+import { Modal, Layout, Upload, Button, Typography, Table, message, Input, Space, Select, Radio, DatePicker } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import Papa from 'papaparse';
 import { useContacts } from './ContactsContext';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+dayjs.extend(utc);
 
 const { Title } = Typography;
 
@@ -16,6 +19,8 @@ const MessageSender = () => {
   const [rawRows, setRawRows] = useState([]);
   const [showConfirm, setShowConfirm] = useState(false);
   const [mediaUrl, setMediaUrl] = useState('');
+  const [deliverMode, setDeliverMode] = useState('now'); // 'now' | 'schedule'
+  const [scheduleAt, setScheduleAt] = useState(null);    // dayjs | null
 
   const handleFile = (file) => {
     Papa.parse(file, {
@@ -54,38 +59,66 @@ const MessageSender = () => {
     setIsSending(true);
 
     try {
-      // Send message via Twilio API
-      const results = await window.twilioAPI.sendMessage({
-        message: messageText,
-        to: contacts.map(c => c.phone),
-        mediaUrl: mediaUrl.trim() || null
-      });
+      const toList = contacts.map(c => c.phone);
+      const media = mediaUrl.trim() || null;
 
-      console.log('Twilio Message Send Results:', results); // Log the response
+      if (deliverMode === 'schedule') {
+        if (!scheduleAt) {
+          message.error('Please choose a date & time.');
+          return;
+        }
+        // schedule via Twilio API (requires Messaging Service)
+        const res = await window.twilioAPI.scheduleCreate({
+          recipients: toList,
+          content: messageText.trim(),
+          mediaUrl: media,
+          sendAtISO: scheduleAt.utc().toISOString(),
+        });
 
-      setSendStatus(results.results || {});
-      const ok = Number(results.ok || 0);
-      const fail = Number(results.fail || 0);
-
-      if (ok > 0 && fail === 0) {
-        message.success(`Sent ${ok} message${ok === 1 ? '' : 's'}.`);
-      } else if (ok > 0 && fail > 0) {
-        message.warning(`Partial success: sent ${ok}, failed ${fail}.`);
+        const scheduledCount = (res?.results || []).filter(r => r.sid).length;
+        if (scheduledCount) {
+          message.success(`Scheduled ${scheduledCount} message${scheduledCount === 1 ? '' : 's'}.`);
+          // optionally reset fields after scheduling
+          setSendStatus({});
+          setMessageText('');
+          setMediaUrl('');
+          setScheduleAt(null);
+        } else {
+          message.error(res?.error || 'Failed to schedule.');
+        }
       } else {
-        message.error('Failed to send all messages.');
+        // Send now via Twilio API
+        const results = await window.twilioAPI.sendMessage({
+          message: messageText,
+          to: toList,
+          mediaUrl: media
+        });
+
+        console.log('Twilio Message Send Results:', results);
+        setSendStatus(results.results || {});
+        const ok = Number(results.ok || 0);
+        const fail = Number(results.fail || 0);
+
+        if (ok > 0 && fail === 0) {
+          message.success(`Sent ${ok} message${ok === 1 ? '' : 's'}.`);
+        } else if (ok > 0 && fail > 0) {
+          message.warning(`Partial success: sent ${ok}, failed ${fail}.`);
+        } else {
+          message.error('Failed to send all messages.');
+        }
+
+        // fire-and-forget logging
+        window.twilioAPI?.storeMessage(
+          messageText,
+          contacts.length,
+          ok > 0 && fail === 0 ? 'sent' : ok > 0 ? 'partial' : 'failed',
+          fail ? `failed: ${fail}` : null
+        ).then(r => console.log('Logged batch:', r))
+          .catch(e => console.warn('Logging failed (non-fatal):', e));
       }
-
-      window.twilioAPI?.storeMessage(
-        messageText,
-        contacts.length,
-        ok > 0 && fail === 0 ? 'sent' : ok > 0 ? 'partial' : 'failed',
-        fail ? `failed: ${fail}` : null
-      ).then(r => console.log('Logged batch:', r))
-        .catch(e => console.warn('Logging failed (non-fatal):', e));
-
     } catch (err) {
-      console.error('Error sending message:', err);
-      message.error('Failed to send message. Please try again later.');
+      console.error('Error (send/schedule):', err);
+      message.error('Action failed. Please try again later.');
     } finally {
       setIsSending(false);
     }
@@ -103,9 +136,11 @@ const MessageSender = () => {
   return (
     <div style={{ padding: '1rem' }}>
       <Title level={3}>Send Messages</Title>
+
       <Upload beforeUpload={handleFile} accept=".csv" showUploadList={false}>
         <Button icon={<UploadOutlined />}>Upload CSV</Button>
       </Upload>
+
       {columnOptions.length > 0 && (
         <div style={{ marginTop: '1rem' }}>
           <label>Select phone number column: </label>
@@ -116,12 +151,13 @@ const MessageSender = () => {
               setSelectedColumn(value);
               const parsed = rawRows
                 .filter(row => !!row[value])
-                .map((row, index) => ({ key: index, phone: row[value], ...row }));
+                .map((row, index) => ({ key: index, phone: String(row[value]).trim(), ...row }));
               setContacts(parsed);
             }}
           />
         </div>
       )}
+
       <Space direction="vertical" style={{ marginTop: '2rem', width: '100%' }}>
         <Input.TextArea
           rows={4}
@@ -134,14 +170,39 @@ const MessageSender = () => {
           value={mediaUrl}
           onChange={(e) => setMediaUrl(e.target.value)}
         />
+
+        <Space direction="vertical" size="small">
+          <Radio.Group
+            value={deliverMode}
+            onChange={(e) => setDeliverMode(e.target.value)}
+            options={[
+              { label: 'Send now', value: 'now' },
+              { label: 'Schedule for later', value: 'schedule' }
+            ]}
+            optionType="button"
+            buttonStyle="solid"
+          />
+          {deliverMode === 'schedule' && (
+            <DatePicker
+              showTime
+              value={scheduleAt}
+              onChange={setScheduleAt}
+              style={{ width: 300 }}
+              placeholder="Pick date & time"
+            />
+          )}
+        </Space>
+
         <Space>
           <Button
             type="primary"
             loading={isSending}
             onClick={() => setShowConfirm(true)}
-            disabled={!contacts.length || !messageText.trim()}
+            disabled={!contacts.length || !messageText.trim() || (deliverMode === 'schedule' && !scheduleAt)}
           >
-            Send Message ({contacts.length})
+            {deliverMode === 'schedule'
+              ? `Schedule (${contacts.length})`
+              : `Send Message (${contacts.length})`}
           </Button>
 
           <Button
@@ -166,18 +227,24 @@ const MessageSender = () => {
       />
 
       <Modal
-        title="Confirm Send"
+        title={deliverMode === 'schedule' ? 'Confirm Schedule' : 'Confirm Send'}
         open={showConfirm}
         onCancel={() => setShowConfirm(false)}
         onOk={() => {
           setShowConfirm(false);
           handleSend();
         }}
-        okText={`Send to ${contacts.length} contact${contacts.length !== 1 ? 's' : ''}`}
+        okText={
+          deliverMode === 'schedule'
+            ? `Schedule for ${contacts.length} contact${contacts.length !== 1 ? 's' : ''}`
+            : `Send to ${contacts.length} contact${contacts.length !== 1 ? 's' : ''}`
+        }
       >
-        <p>You’re about to send this message:</p>
+        <p>You’re about to {deliverMode === 'schedule' ? 'schedule' : 'send'} this message{deliverMode === 'schedule' && scheduleAt ? ` for ${scheduleAt.local().format('MMM D, HH:mm')}` : ''}:</p>
         <pre style={{ whiteSpace: 'pre-wrap' }}>{messageText}</pre>
-        <p>Are you sure?</p>
+        {deliverMode === 'schedule' && !scheduleAt && (
+          <p style={{ color: 'red' }}>Please pick a date & time.</p>
+        )}
       </Modal>
     </div>
   );
