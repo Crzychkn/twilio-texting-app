@@ -1,4 +1,4 @@
-// renderer/src/SchedulePage.jsx
+// renderer/src/ScheduledPage.jsx
 import React, { useEffect, useState } from 'react';
 import { Card, Button, Table, Space, message, Typography, Tooltip, Tag, Popover } from 'antd';
 import dayjs from 'dayjs';
@@ -7,7 +7,7 @@ dayjs.extend(utc);
 
 const { Text, Paragraph } = Typography;
 
-export default function SchedulePage() {
+export default function ScheduledPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
